@@ -2,7 +2,7 @@ from word_embedding import word_embedding
 from preprocess_data import Preprocess, Preprocess_query
 import pandas as pd
 from gensim.models import Word2Vec
-from retrieval import PRF, first_ret, init_token_a, evaluation
+from retrieval import PRF, first_ret, init_token_a, evaluation, process_list_idx, get_rel_doc
 import os
 import sys
 import math
@@ -45,14 +45,14 @@ if __name__ == "__main__":
         model = Word2Vec.load('model/wordembed.model')
 
     # loop through qr_size
-    recall_r = []
-    recall_j = []
-    recall_w = []
-    recall_jw = []
-    recall_wj = []
-    recall_1st = []
+    score_r = []
+    score_j = []
+    score_w = []
+    score_jw = []
+    score_wj = []
+    score_1st = []
 
-    for pos in range(40):
+    for pos in range(0, 20):
         cek = qr.loc[qr['Query_ID'] == pos+1]
         if cek.empty:
             # skip
@@ -62,7 +62,8 @@ if __name__ == "__main__":
         # pos = 4
         # n -> get number of relevan doc
         n_rel_doc = len(cek)
-        n_doc = 30
+        print(f"jumlah dokumen relevan: {n_rel_doc}")
+        n_doc = 50
         docs_of_idx = a.loc[a["Indeks data"] == ".I "+str(pos+1)+" "]
 
         # get query from list of query
@@ -71,41 +72,45 @@ if __name__ == "__main__":
 
         # get first retrieval top n docs
         top_n_doc, idx = first_ret(a, inq, n_doc)
-        # print("\nFirst retrieval: ")
-        # print(top_n_doc)
 
         # doc id
         doc_ids = qr.loc[qr['Query_ID'] == pos+1]
 
-        eval = evaluation(doc_ids, top_n_doc, n_rel_doc, n_doc)
-        print("this is value of eval: \nPrecision: {} - Recall: {} - F.Score: {}".format(
-            eval[0], eval[1], eval[2]))
-        recall_1st.append(round(eval[1], 3))
+        list_idx = process_list_idx(top_n_doc)
+        rel_doc = get_rel_doc(doc_ids["Answer_ID"], list_idx)
+
+        eval = evaluation(doc_ids, list_idx, n_rel_doc, n_doc, 'map', rel_doc)
+        rec = evaluation(doc_ids, list_idx, n_rel_doc,
+                         n_doc, 'recall', rel_doc)
+        prec = evaluation(doc_ids, list_idx, n_rel_doc,
+                          n_doc, 'precision', rel_doc)
+        print(
+            "this is score of map: {} - recall: {} - precision: {}".format(eval, rec, prec))
+        score_1st.append(round(eval, 3))
         # tokenize a
         # token_docs = init_token_a(top_n_doc)
-        if eval[1] == 100:
-            recall_r.append(100)
-            recall_j.append(100)
-            recall_jw.append(100)
-            recall_wj.append(100)
-            recall_w.append(100)
+        if eval == 100:
+            score_r.append(100)
+            score_j.append(100)
+            score_jw.append(100)
+            score_wj.append(100)
+            score_w.append(100)
             continue
-
         # # prf
-        n_words = 4
+        n_words = 2
         # random variable, between 0 and 1
         fa_pop_size = 20
-        top_n_words = 100
+        top_n_words = 50
         top_filtered_words = 20
         alpha = 1
         tetha = 0.95
-        rec_r, rec_j, rec_jw, rec_wj, rec_w = PRF(a, eval[1], top_n_doc, inq, top_n_words, top_filtered_words, n_doc, tetha, alpha,
-                                                  10, fa_pop_size, n_words, doc_ids, n_rel_doc, idx)
-        recall_r.append(round(rec_r[1], 3))
-        recall_j.append(round(rec_j[1], 3))
-        recall_jw.append(round(rec_jw[1], 3))
-        recall_wj.append(round(rec_wj[1], 3))
-        recall_w.append(round(rec_w[1], 3))
+        rec_r, rec_j, rec_jw, rec_wj, rec_w = PRF(a, eval, top_n_doc, inq, top_n_words, top_filtered_words, n_doc, tetha, alpha,
+                                                  10, fa_pop_size, n_words, doc_ids, n_rel_doc, list_idx, rel_doc)
+        score_r.append(round(rec_r[1], 3))
+        score_j.append(round(rec_j[1], 3))
+        score_jw.append(round(rec_jw[1], 3))
+        score_wj.append(round(rec_wj[1], 3))
+        score_w.append(round(rec_w[1], 3))
 
         print(f"this is best solution rocchio: \n{rec_r[0]}")
         print(f"this is best solution jaccard: \n{rec_j[0]}")
@@ -113,17 +118,18 @@ if __name__ == "__main__":
         print(f"this is best solution w2v+jaccard: \n{rec_wj[0]}")
         print(f"this is best solution w2v: \n{rec_w[0]}")
         print()
-        print(f"recall fa+rocchio: {recall_r}")
-        print(f"recall fa+jaccard: {recall_j}")
-        print(f"recall fa+jaccard+w2v: {recall_jw}")
-        print(f"recall fa+w2v+jaccard: {recall_wj}")
-        print(f"recall fa+w2v: {recall_w}")
-        print(f"recall bm25: {recall_1st}")
+        print(f"recall fa+rocchio: {score_r}")
+        print(f"recall fa+jaccard: {score_j}")
+        print(f"recall fa+jaccard+w2v: {score_jw}")
+        print(f"recall fa+w2v+jaccard: {score_wj}")
+        print(f"recall fa+w2v: {score_w}")
+        print(f"recall bm25: {score_1st}")
 
-    print(f"average recall rocchio: {sum(recall_r)/len(recall_r)}")
-    print(f"average recall jaccard: {sum(recall_j)/len(recall_j)}")
-    print(f"average recall jaccard+w2v: {sum(recall_jw)/len(recall_jw)}")
-    print(f"average recall w2v+jaccard: {sum(recall_wj)/len(recall_wj)}")
-    print(f"average recall w2v: {sum(recall_w)/len(recall_w)}")
-    print(f"average recall bm25: {sum(recall_1st)/len(recall_1st)}")
+    # sys.exit()
+    print(f"average recall rocchio: {sum(score_r)/len(score_r)}")
+    print(f"average recall jaccard: {sum(score_j)/len(score_j)}")
+    print(f"average recall jaccard+w2v: {sum(score_jw)/len(score_jw)}")
+    print(f"average recall w2v+jaccard: {sum(score_wj)/len(score_wj)}")
+    print(f"average recall w2v: {sum(score_w)/len(score_w)}")
+    print(f"average recall bm25: {sum(score_1st)/len(score_1st)}")
     print("finished")

@@ -23,37 +23,36 @@ rq = Preprocess_query()
 in_idx = []
 
 
-class Firefly:
-    # class firefly algoritm
-    # for individual firefly
-    def __init__(self, **kwargs):
-        self.gamma = kwargs.get("gamma", 0.95)
-        self.alpha = kwargs.get("alpha", 1)
-        self.term_expansion = kwargs.get("term_expansion")
-        self.term_size = kwargs.get("term_size")
-        self.population = self.init_population()
-        self.light = None
+# class Firefly:
+#     # class firefly algoritm
+#     # for individual firefly
+#     def __init__(self, **kwargs):
+#         self.gamma = kwargs.get("gamma", 0.95)
+#         self.alpha = kwargs.get("alpha", 1)
+#         self.term_expansion = kwargs.get("term_expansion")
+#         self.term_size = kwargs.get("term_size")
+#         self.population = self.init_population()
+#         self.light = None
 
-    # init population
-    def init_population(self):
-        # initiate list with size of population size
-        return random.sample(self.term_expansion, self.term_size)
+#     # init population
+#     def init_population(self):
+#         # initiate list with size of population size
+#         return random.sample(self.term_expansion, self.term_size)
 
-    # update population. addition need to be a list
-    def update_population(self, current_pop, addition):
-        pop = current_pop + addition
-        self.population = pop
+#     # update population. addition need to be a list
+#     def update_population(self, current_pop, addition):
+#         pop = current_pop + addition
+#         self.population = pop
 
-    def fitness(self, rel_doc_idx, top_n_doc, n_query, n_docs):
-        # get evaluation value
-        precision, recall, f_score = evaluation(
-            rel_doc_idx, top_n_doc, n_query, n_docs)
-        # choose which evaluation value to use as fitness function.
-        self.light = recall
+#     def fitness(self, rel_doc_idx, top_n_doc, n_query, n_docs):
+#         # get evaluation value
+#         # choose which evaluation value to use as fitness function.
+#         self.light = evaluation(
+#             rel_doc_idx, top_n_doc, n_query, n_docs, 'recall')
 
-    # update light intensity
-    # def update_light(self, parameter_list):
-    #     pass
+# update light intensity
+# def update_light(self, parameter_list):
+#     pass
 
 
 class Term_Pool:
@@ -235,7 +234,7 @@ def count_idf(docs, term):
 
 
 class Do_FA:
-    def __init__(self, all_docs, threshold,  fa_gamma, words_population, term_size, fa_num_iter, q_terms, n_docs, rel_doc_idx, rel_doc_n, fa_alpha, fa_pop_size):
+    def __init__(self, all_docs, threshold,  fa_gamma, words_population, term_size, fa_num_iter, q_terms, n_docs, rel_doc_idx, rel_doc_n, fa_alpha, fa_pop_size, rel_doc):
         self.docs = all_docs
         self.gamma = fa_gamma
         self.words_pop = words_population
@@ -248,8 +247,9 @@ class Do_FA:
         self.alpha = fa_alpha
         self.pop_size = fa_pop_size
         self.threshold = threshold
-
+        self.rel_doc = rel_doc
     # initiate fal
+
     def initiate(self):
         fal_pop = []*self.pop_size
         # initiate fal and score
@@ -270,10 +270,11 @@ class Do_FA:
         new_q = " ".join(tmp_term)
         # print("this new query: {}".format(new_q))
         ret, x = first_ret(self.docs, new_q, self.n_docs)
-        precision, recall, f_score = evaluation(
-            self.rel_doc_idx, ret, self.rel_doc_n, self.n_docs)
         # print(f"Expan words: {expand_word} with recall: {recall}")
-        return recall
+        list_idx = process_list_idx(ret)
+        rel_doc = get_rel_doc(self.rel_doc, list_idx)
+        return evaluation(
+            self.rel_doc_idx, list_idx, self.rel_doc_n, self.n_docs, 'map', rel_doc)
     # calculate distance between fa1 and fa2
 
     def calculate_dis(self, fa1, fa2):
@@ -445,7 +446,7 @@ class Do_FA:
         return fal[0]
 
 
-def PRF(all_docs, threshold, top_n_doc, query, n_words, filtered_words, n_docs, fa_gamma, fa_alpha, fa_num_iter, fa_pop_size, fa_term_size, rel_doc_idx, rel_doc_n, rest_docs_idx):
+def PRF(all_docs, threshold, top_n_doc, query, n_words, filtered_words, n_docs, fa_gamma, fa_alpha, fa_num_iter, fa_pop_size, fa_term_size, rel_doc_idx, rel_doc_n, list_idx, rel_doc):
     print("do PRF")
 
     tp = Term_Pool(docs=all_docs["Content"])
@@ -476,32 +477,32 @@ def PRF(all_docs, threshold, top_n_doc, query, n_words, filtered_words, n_docs, 
     print("fa + rocchio")
 
     tmp_r = Do_FA(all_docs, threshold, fa_gamma, roc, fa_term_size, fa_num_iter,
-                  q_terms, n_docs, rel_doc_idx, rel_doc_n, fa_alpha, fa_pop_size)
+                  q_terms, n_docs, rel_doc_idx, rel_doc_n, fa_alpha, fa_pop_size, rel_doc)
     r_fa = tmp_r.main()
     print(f"this is solution from rocchio: {r_fa}")
 
     print("fa + jaccard")
 
     tmp_j = Do_FA(all_docs, threshold, fa_gamma, top_n_words, fa_term_size, fa_num_iter,
-                  q_terms, n_docs, rel_doc_idx, rel_doc_n, fa_alpha, fa_pop_size)
+                  q_terms, n_docs, rel_doc_idx, rel_doc_n, fa_alpha, fa_pop_size, rel_doc)
     jc_fa = tmp_j.main()
     print(f"this is solution from jaccard: {jc_fa}")
 
     print("fa + jaccard + w2v")
     tmp_jw = Do_FA(all_docs, threshold, fa_gamma, top_n_filtered, fa_term_size, fa_num_iter,
-                   q_terms, n_docs, rel_doc_idx, rel_doc_n, fa_alpha, fa_pop_size)
+                   q_terms, n_docs, rel_doc_idx, rel_doc_n, fa_alpha, fa_pop_size, rel_doc)
     jcw_fa = tmp_jw.main()
     print(f"this is solution from jaccard+w2v: {jcw_fa}")
 
     print("fa + w2v")
     tmp_w = Do_FA(all_docs, threshold, fa_gamma, similar_words, fa_term_size, fa_num_iter,
-                  q_terms, n_docs, rel_doc_idx, rel_doc_n, fa_alpha, fa_pop_size)
+                  q_terms, n_docs, rel_doc_idx, rel_doc_n, fa_alpha, fa_pop_size, rel_doc)
     w_fa = tmp_w.main()
     print(f"this is solution from w2v{w_fa}")
 
     print("fa + w2v + jaccard")
     tmp_wj = Do_FA(all_docs, threshold, fa_gamma, freq_similar_words, fa_term_size, fa_num_iter,
-                   q_terms, n_docs, rel_doc_idx, rel_doc_n, fa_alpha, fa_pop_size)
+                   q_terms, n_docs, rel_doc_idx, rel_doc_n, fa_alpha, fa_pop_size, rel_doc)
     wj_fa = tmp_wj.main()
     print(f"this is solution from w2v + jaccard{wj_fa}")
 
@@ -546,35 +547,67 @@ def first_ret(docs, query, n):
     return top_n_doc, top_idx
 
 
-def recall():
-    pass
+def mean_avg_prec(rel_doc_ans, list_idx, n):
+    score = 0
+    for i in range(len(list_idx)):
+        if list_idx[i] in rel_doc_ans:
+            cur_rel_doc = get_rel_doc(rel_doc_ans, list_idx[:1])
+            score_now = (len(cur_rel_doc)/(i+1)) * 100
+            score += score_now
+        else:
+            continue
+    if len(rel_doc_ans) == 0:
+        return 0
+    score /= len(rel_doc_ans)
+    return score
 
 
-def precision():
-    pass
+# get number of relevan documents
+def get_rel_doc(rel_doc_idx, list_idx):
+    ret_rel = []
+    for doc_id in rel_doc_idx:
+        if doc_id in list_idx:
+            ret_rel.append(doc_id)
+    return ret_rel
 
 
-def evaluation(rel_doc_idx, top_n_doc, n, n_docs):
-        # get metrics
-    # rel_doc_idx = qr.loc[qr['Query_ID'] == pos]
+def process_list_idx(top_n_doc):
     list_idx = top_n_doc["Indeks data"].to_list()
     tmp = []
-    print(f"list idx before: {list_idx}")
     list_idx = [[int(idx) for idx in lidx.split() if idx.isdigit()]
                 for lidx in list_idx]
-    print(f"list idx: {list_idx}")
     list_idx = [i[0] for i in list_idx]
-    print(f"list idx now: {list_idx}")
-    num = 0
-    for doc_id in rel_doc_idx["Answer_ID"]:
-        if doc_id in list_idx:
-            num += 1
+    return list_idx
 
-    precision = (num/n_docs)*100
-    recall = (num/n)*100
-    if precision == 0 and recall == 0:
-        f_score = 0
-    else:
-        f_score = 2*(precision*recall)/(precision+recall)
-    # print(f"Jumlah dokumen yang benar: {num} - dari {n} dokumen")
-    return precision, recall, f_score
+
+def evaluation(rel_doc_idx, list_idx, n, n_docs, eval_type, rel_doc_idx_loc=None):
+        # get metrics
+    # # rel_doc_idx = qr.loc[qr['Query_ID'] == pos]
+    # list_idx = top_n_doc["Indeks data"].to_list()
+    # tmp = []
+    # # print(f"list idx before: {list_idx}")
+    # list_idx = [[int(idx) for idx in lidx.split() if idx.isdigit()]
+    #             for lidx in list_idx]
+    # # print(f"list idx: {list_idx}")
+    # list_idx = [i[0] for i in list_idx]
+    # print(f"list idx now: {list_idx}")
+    num = 0
+    score = 0
+
+    if rel_doc_idx_loc is None:
+        rel_doc_idx_loc = get_rel_doc(rel_doc_idx, list_idx)
+
+    if eval_type == "precision":
+        score = (len(rel_doc_idx_loc)/n_docs)*100
+    elif eval_type == 'recall':
+        score = (len(rel_doc_idx_loc)/n)*100
+    elif eval_type == 'f_score':
+        pre = pre_rec(rel_doc_idx_loc, n_docs)
+        rec = pre_rec(rel_doc_idx_loc, n)
+        if pre == 0 and rec == 0:
+            score = 0
+        else:
+            score = 2*(pre*rec)/(pre+re)
+    elif eval_type == 'map' or eval_type == 'mean average precision':
+        score = mean_avg_prec(rel_doc_idx_loc, list_idx, len(rel_doc_idx_loc))
+    return score
